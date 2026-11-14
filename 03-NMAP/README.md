@@ -35,6 +35,20 @@ Techniques avancées basées sur des indicateurs TCP non standards, pour contour
 - **Usurpation (spoofing)** : adresse IP source usurpée, adresse MAC usurpée, "leurres" (decoys) pour noyer l'origine réelle du scan, scan "zombie" (idle scan) qui fait porter le scan par une machine tierce discrète.
 - **Fragmentation de paquets** : découpe les données IP en petits fragments (8 ou 16 octets) pour passer sous le radar d'un pare-feu/IDS basique.
 - **Règle générale de choix de technique** : Null/FIN/Xmas si pare-feu stateless suspecté ; Maimon sur cible ancienne type BSD ; ACK/Window pour cartographier les règles d'un pare-feu ; leurres/fragmentation si on doit rester discret ou illisible ; `--reason` pour comprendre comment Nmap est arrivé à sa conclusion.
+
+---
+
+## 🔬 Analyses de ports Nmap après analyse
+
+Une fois les ports ouverts identifiés, cette room couvre comment creuser plus loin : identifier précisément ce qui tourne derrière chaque port, et organiser les résultats pour le rapport.
+
+- **Détection de service/version** (`-sV`) : identifie le logiciel et sa version exacte derrière un port ouvert, avec un niveau d'intensité réglable (sondes rapides vs exhaustives).
+- **Détection d'OS** (`-O`) : identifie le système d'exploitation de la cible via le fingerprinting de la pile TCP/IP.
+- **Traceroute intégré** (`--traceroute`) : cartographie le chemin réseau en même temps que le scan, sans commande séparée.
+- **NSE (Nmap Scripting Engine)** : exécution de scripts pour automatiser des vérifications plus poussées (par défaut ou personnalisés).
+- **`-A`** : le combo "tout en un" (version + OS + scripts par défaut + traceroute) — pratique en reconnaissance rapide, mais plus bruyant/détectable.
+- **Formats de sortie** : indispensables pour documenter un test d'intrusion et réutiliser les résultats (grep, parsing automatisé, rapport).
+
 ---
 
 ## 📝 Ce que j'ai retenu
